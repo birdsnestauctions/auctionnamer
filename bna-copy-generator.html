@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BNA Auction Copy Generator</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; min-height: 100vh; }
+
+header { background: #2D6B5E; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+header h1 { font-size: 17px; font-weight: 500; flex: 1; }
+header span { font-size: 13px; opacity: 0.75; }
+.header-gear { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.75); padding: 4px; display: flex; align-items: center; border-radius: 6px; transition: background 0.15s, color 0.15s; }
+.header-gear:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.header-gear svg { width: 18px; height: 18px; }
+
+/* Settings */
+#settings-screen { display: none; align-items: center; justify-content: center; min-height: calc(100vh - 52px); padding: 40px 24px; }
+.settings-card { background: #fff; border-radius: 16px; padding: 40px 48px; max-width: 480px; width: 100%; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.settings-card h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.settings-card > p { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.5; }
+.key-saved-msg { display: none; font-size: 12px; color: #2D6B5E; background: #f0f8f5; border: 1px solid #b0cec8; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px; }
+.settings-actions { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.btn-danger { border-color: #f5c6c6; color: #c0392b; font-size: 12px; }
+.btn-danger:hover { background: #fff3f3; }
+
+/* Setup */
+#setup-screen { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 52px); padding: 40px 24px; }
+.setup-card { background: #fff; border-radius: 16px; padding: 40px 48px; max-width: 560px; width: 100%; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.setup-card h2 { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.setup-card > p { font-size: 14px; color: #666; margin-bottom: 28px; line-height: 1.5; }
+.no-key-notice { display: none; background: #fff8f0; border: 1px solid #f5d8a6; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #7a5000; margin-bottom: 20px; }
+.no-key-notice a { color: #2D6B5E; cursor: pointer; text-decoration: underline; }
+
+/* Mode toggle */
+.mode-toggle { display: flex; gap: 0; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+.mode-btn { flex: 1; padding: 9px 16px; font-size: 13px; font-family: inherit; border: none; background: #fff; color: #888; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.mode-btn.active { background: #2D6B5E; color: #fff; }
+.mode-btn:first-child { border-right: 1px solid #ddd; }
+
+.field-label { font-size: 12px; font-weight: 500; color: #555; margin-bottom: 6px; display: block; }
+.field-input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 20px; outline: none; transition: border-color 0.15s; }
+.field-input:focus { border-color: #2D6B5E; }
+textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+.drop-zone { background: #f9f9f7; border: 2px dashed #b0cec8; border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; margin-bottom: 24px; }
+.drop-zone.drag-over { border-color: #2D6B5E; background: #f0f8f5; }
+.drop-zone p { font-size: 14px; color: #666; margin-bottom: 12px; }
+.drop-zone .file-note { font-size: 11px; color: #aaa; margin: 8px 0 0; }
+
+.btn { font-size: 13px; padding: 9px 18px; border-radius: 8px; border: 1px solid #ccc; background: #fff; color: #1a1a1a; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.btn:hover { background: #f5f5f3; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-teal { background: #2D6B5E; color: #fff; border-color: #2D6B5E; width: 100%; padding: 11px; font-size: 14px; }
+.btn-teal:hover:not(:disabled) { background: #235549; }
+.btn-ghost { border-color: #ddd; color: #888; font-size: 12px; }
+.btn-ghost:hover { color: #1a1a1a; }
+.btn-copy { font-size: 11px; padding: 5px 10px; border-color: #2D6B5E; color: #2D6B5E; background: #fff; }
+.btn-copy:hover { background: #f0f8f5; }
+.btn-copy.copied { background: #2D6B5E; color: #fff; }
+
+#setup-error { display: none; background: #fff3f3; border: 1px solid #f5c6c6; color: #c0392b; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+#file-chosen { font-size: 12px; color: #2D6B5E; margin: -16px 0 20px; display: none; }
+
+/* App */
+#app-screen { display: none; }
+#app-toolbar { background: #fff; border-bottom: 1px solid #e8e8e6; padding: 10px 24px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; top: 0; z-index: 50; }
+#app-label { font-size: 14px; font-weight: 500; flex: 1; }
+#progress-info { font-size: 12px; color: #888; }
+#gen-progress { display: none; background: #fff; border-bottom: 1px solid #e8e8e6; padding: 10px 24px; }
+.prog-bar-track { width: 100%; height: 4px; background: #e8e8e6; border-radius: 2px; overflow: hidden; }
+.prog-bar-fill { height: 100%; background: #2D6B5E; border-radius: 2px; width: 0%; transition: width 0.3s; }
+#prog-label { font-size: 12px; color: #888; margin-top: 6px; }
+
+#results-area { padding: 20px 24px 60px; }
+
+/* Newsletter result */
+.newsletter-card { background: #fff; border: 1px solid #e8e8e6; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.newsletter-card-header { padding: 14px 16px 10px; border-bottom: 1px solid #f0f0ee; display: flex; align-items: center; justify-content: space-between; }
+.newsletter-card-header h3 { font-size: 14px; font-weight: 500; }
+.newsletter-card-body { padding: 14px 16px; }
+.newsletter-text { font-size: 13px; line-height: 1.7; color: #1a1a1a; background: #f9f9f7; border-radius: 8px; padding: 14px 16px; white-space: pre-wrap; }
+
+/* Lot cards */
+.lot-card { background: #fff; border: 1px solid #e8e8e6; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.lot-card-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 1px solid #f0f0ee; gap: 12px; }
+.lot-card-meta { flex: 1; }
+.lot-badge { display: inline-block; font-size: 10px; font-weight: 600; color: #fff; background: #2D6B5E; border-radius: 4px; padding: 2px 7px; margin-bottom: 4px; }
+.lot-original-name { font-size: 12px; color: #999; margin-top: 2px; }
+.lot-card-body { padding: 14px 16px; }
+.copy-section { margin-bottom: 14px; }
+.copy-section:last-child { margin-bottom: 0; }
+.copy-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #aaa; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.copy-text { font-size: 13px; line-height: 1.6; color: #1a1a1a; background: #f9f9f7; border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+
+.pending-card { background: #fff; border: 1px solid #e8e8e6; border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; color: #999; font-size: 13px; }
+.spinner { width: 16px; height: 16px; border: 2px solid #e8e8e6; border-top-color: #2D6B5E; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-card { background: #fff3f3; border: 1px solid #f5c6c6; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; font-size: 13px; color: #c0392b; }
+
+.toast { position: fixed; bottom: 24px; right: 24px; background: #2D6B5E; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 200; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BNA Auction Copy Generator</h1>
+  <span>Bird's Nest Auctions</span>
+  <button class="header-gear" onclick="showSettings()" title="API Key Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+</header>
+
+<!-- Settings -->
+<div id="settings-screen">
+  <div class="settings-card">
+    <h2>API Key Settings</h2>
+    <p>Enter your Anthropic API key below. It will be saved to this browser so you only need to do this once per device.</p>
+    <div class="key-saved-msg" id="key-saved-msg">✓ A key is currently saved on this device.</div>
+    <label class="field-label">Anthropic API key</label>
+    <input type="password" id="settings-key-input" class="field-input" placeholder="sk-ant-..." autocomplete="off">
+    <div class="settings-actions">
+      <button class="btn btn-teal" style="width:auto;padding:9px 20px;" onclick="saveKey()">Save key</button>
+      <button class="btn btn-ghost" onclick="cancelSettings()">Cancel</button>
+      <button class="btn btn-danger" onclick="clearKey()" id="clear-key-btn" style="display:none;margin-left:auto;">Remove saved key</button>
+    </div>
+  </div>
+</div>
+
+<!-- Setup -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <h2>Generate auction copy</h2>
+    <p>Upload your BidPath CSV export, choose what to generate, and the tool will write copy prioritized by estimated lot value.</p>
+    <div id="setup-error"></div>
+    <div class="no-key-notice" id="no-key-notice">No API key saved yet. <a onclick="showSettings()">Add your key in Settings</a> to get started.</div>
+
+    <label class="field-label">What would you like to generate?</label>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-auction" onclick="setMode('auction')">Auction titles &amp; descriptions</button>
+      <button class="mode-btn" id="mode-newsletter" onclick="setMode('newsletter')">Newsletter blurb</button>
+    </div>
+
+    <div id="pickup-section">
+      <label class="field-label" for="pickup-input">Pickup &amp; shipping info <span style="font-weight:400;color:#aaa;">(appended to every description)</span></label>
+      <textarea id="pickup-input" class="field-input" rows="3" placeholder="Pick up is Saturday, May Xth, 10-2&#10;&#10;Yes, we ship! Transfers to our Derry HQ also available (fees apply)."></textarea>
+    </div>
+
+    <label class="field-label">BidPath CSV export</label>
+    <div class="drop-zone" id="csv-drop">
+      <p>Drop your CSV here or click to browse</p>
+      <button class="btn btn-ghost" onclick="document.getElementById('csv-file-input').click()">Choose file</button>
+      <p class="file-note">Same export used for the sort tool</p>
+    </div>
+    <input type="file" id="csv-file-input" accept=".csv" style="display:none">
+    <div id="file-chosen"></div>
+    <button class="btn btn-teal" id="generate-btn" onclick="startGeneration()" disabled>Generate</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app-screen">
+  <div id="app-toolbar">
+    <span id="app-label">Generating...</span>
+    <span id="progress-info"></span>
+    <button class="btn btn-ghost" onclick="goBack()">← New auction</button>
+  </div>
+  <div id="gen-progress">
+    <div class="prog-bar-track"><div class="prog-bar-fill" id="prog-fill"></div></div>
+    <div id="prog-label">Starting...</div>
+  </div>
+  <div id="results-area"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var lots = [], currentFilename = '', currentMode = 'auction';
+var STORAGE_KEY = 'bna_anthropic_key';
+var PICKUP_KEY = 'bna_pickup_text';
+var DEFAULT_PICKUP = 'Yes, we ship! Transfers to our Derry HQ also available (fees apply).';
+var BATCH_SIZE = 5;
+
+// ── Key management ──
+function getSavedKey() { try { return localStorage.getItem(STORAGE_KEY) || ''; } catch(e) { return ''; } }
+function saveKey() {
+  var val = document.getElementById('settings-key-input').value.trim();
+  if (!val || val.startsWith('•')) { showToast('Please enter a valid key'); return; }
+  try { localStorage.setItem(STORAGE_KEY, val); showToast('Key saved to this device'); cancelSettings(); checkReady(); } catch(e) { showToast('Could not save — browser storage may be blocked'); }
+}
+function clearKey() {
+  if (!confirm('Remove the saved API key from this device?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  showToast('Key removed'); cancelSettings(); checkReady();
+}
+function showSettings() {
+  var saved = getSavedKey();
+  document.getElementById('key-saved-msg').style.display = saved ? 'block' : 'none';
+  document.getElementById('clear-key-btn').style.display = saved ? 'inline-block' : 'none';
+  var inp = document.getElementById('settings-key-input');
+  inp.value = saved ? '••••••••••••••••' : '';
+  inp.onfocus = function() { if (inp.value.startsWith('•')) inp.value = ''; };
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('settings-screen').style.display = 'flex';
+}
+function cancelSettings() {
+  document.getElementById('settings-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+}
+
+// ── Mode ──
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-auction').className = 'mode-btn' + (mode === 'auction' ? ' active' : '');
+  document.getElementById('mode-newsletter').className = 'mode-btn' + (mode === 'newsletter' ? ' active' : '');
+  document.getElementById('pickup-section').style.display = mode === 'auction' ? 'block' : 'none';
+}
+
+// ── Pickup text persistence ──
+function loadPickupText() {
+  try {
+    var saved = localStorage.getItem(PICKUP_KEY);
+    if (saved) {
+      document.getElementById('pickup-input').value = saved;
+    } else {
+      document.getElementById('pickup-input').value = DEFAULT_PICKUP;
+    }
+  } catch(e) {
+    document.getElementById('pickup-input').value = DEFAULT_PICKUP;
+  }
+}
+function savePickupText(text) {
+  try { localStorage.setItem(PICKUP_KEY, text); } catch(e) {}
+}
+
+// ── On load ──
+window.addEventListener('load', function() {
+  loadPickupText();
+  document.getElementById('pickup-input').addEventListener('change', function() {
+    savePickupText(this.value);
+  });
+  checkReady();
+});
+
+// ── CSV parser ──
+function parseBidPathLine(line) {
+  var p1 = line.indexOf('","');
+  if (p1 < 0) return null;
+  var p2 = line.indexOf('","', p1 + 3);
+  if (p2 < 0) return null;
+  var item = line[0] === '"' ? line.substring(1, p1) : line.substring(0, p1);
+  var lot = line.substring(p1 + 3, p2);
+  var lastQ = line.lastIndexOf('"');
+  var prevSep = line.lastIndexOf('","', lastQ - 1);
+  var sortOrder = prevSep >= 0 ? line.substring(prevSep + 3, lastQ) : '';
+  var imgMarker = line.indexOf('","https://');
+  if (imgMarker < 0) imgMarker = line.indexOf('","http://');
+  var name, image;
+  if (imgMarker > p2) { name = line.substring(p2 + 3, imgMarker); image = line.substring(imgMarker + 3, prevSep); }
+  else { name = line.substring(p2 + 3, prevSep); image = ''; }
+  if (name.charAt(0) === '"') name = name.substring(1);
+  if (name.charAt(name.length - 1) === '"') name = name.substring(0, name.length - 1);
+  return { item: item, lot: lot, name: name, image: image, sort: sortOrder };
+}
+function parseCSV(text) {
+  var lines = text.split(/\r?\n/), results = [], done = false;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    if (!done) { done = true; continue; }
+    var row = parseBidPathLine(line);
+    if (row && row.name) results.push(row);
+  }
+  return results;
+}
+
+// ── File handling ──
+var csvDrop = document.getElementById('csv-drop'), csvInput = document.getElementById('csv-file-input');
+csvDrop.addEventListener('dragover', function(e) { e.preventDefault(); csvDrop.classList.add('drag-over'); });
+csvDrop.addEventListener('dragleave', function() { csvDrop.classList.remove('drag-over'); });
+csvDrop.addEventListener('drop', function(e) { e.preventDefault(); csvDrop.classList.remove('drag-over'); if (e.dataTransfer.files[0]) readCSV(e.dataTransfer.files[0]); });
+csvDrop.addEventListener('click', function(e) { if (e.target === csvDrop) csvInput.click(); });
+csvInput.addEventListener('change', function() { if (csvInput.files[0]) { readCSV(csvInput.files[0]); csvInput.value = ''; } });
+
+function readCSV(file) {
+  if (!file.name.toLowerCase().endsWith('.csv')) { showSetupError('Please upload a .csv file.'); return; }
+  currentFilename = file.name;
+  var r = new FileReader();
+  r.onload = function(e) {
+    lots = parseCSV(e.target.result);
+    if (!lots.length) { showSetupError('No lots found. Check this is the correct BidPath export.'); return; }
+    hideSetupError();
+    var fc = document.getElementById('file-chosen');
+    fc.textContent = '✓ ' + file.name + ' — ' + lots.length + ' lots loaded';
+    fc.style.display = 'block';
+    checkReady();
+  };
+  r.readAsText(file);
+}
+
+function checkReady() {
+  var key = getSavedKey();
+  document.getElementById('no-key-notice').style.display = key ? 'none' : 'block';
+  document.getElementById('generate-btn').disabled = !(key && lots.length > 0);
+}
+
+// ── Generation ──
+function startGeneration() {
+  var key = getSavedKey();
+  if (!key || !lots.length) return;
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  var auctionName = currentFilename.replace(/\.csv$/i, '');
+  var modeLabel = currentMode === 'newsletter' ? 'Newsletter blurb' : 'Auction copy';
+  document.getElementById('app-label').textContent = auctionName + ' — ' + modeLabel;
+  document.getElementById('gen-progress').style.display = 'block';
+  document.getElementById('results-area').innerHTML = '';
+
+  if (currentMode === 'newsletter') {
+    generateNewsletter(key, lots);
+  } else {
+    generateAuctionCopy(key, lots);
+  }
+}
+
+// ── Newsletter ──
+function generateNewsletter(apiKey, allLots) {
+  var results = document.getElementById('results-area');
+  var card = document.createElement('div');
+  card.className = 'pending-card';
+  card.innerHTML = '<div class="spinner"></div><span>Writing newsletter blurb for ' + allLots.length + ' lots...</span>';
+  results.appendChild(card);
+  updateProgress(0, 1, 'Writing newsletter blurb...');
+
+  var lotList = allLots.map(function(l) { return '[Lot ' + l.lot + '] ' + l.name; }).join('\n');
+
+  callClaude(apiKey, [{
+    role: 'user',
+    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire:\n\n' + lotList + '\n\nWrite a short newsletter blurb (2-3 paragraphs) for this auction. It should:\n- Give a general sense of what\'s in the auction (themes, categories, overall feel)\n- Call out 3-5 of the most exciting or valuable standout lots by name\n- Sound warm, enthusiastic, and inviting — like it\'s written by someone who knows their antiques and collectibles\n- Not mention china cabinets or desks as standout items\n- End with a gentle call to action to browse and bid\n\nReturn only the blurb text, no JSON, no headers.'
+  }], 800).then(function(text) {
+    card.remove();
+    var resultCard = document.createElement('div');
+    resultCard.className = 'newsletter-card';
+    resultCard.innerHTML =
+      '<div class="newsletter-card-header"><h3>Newsletter blurb</h3><button class="btn btn-copy" onclick="copyText(this,\'newsletter-text\')">Copy</button></div>' +
+      '<div class="newsletter-card-body"><div class="newsletter-text" id="newsletter-text">' + esc(text.trim()) + '</div></div>';
+    results.appendChild(resultCard);
+    document.getElementById('gen-progress').style.display = 'none';
+    document.getElementById('progress-info').textContent = 'Done';
+    showToast('Newsletter blurb ready!');
+  }).catch(function(err) {
+    card.remove();
+    var errCard = document.createElement('div');
+    errCard.className = 'error-card';
+    errCard.textContent = 'Error: ' + err.message;
+    results.appendChild(errCard);
+    document.getElementById('gen-progress').style.display = 'none';
+  });
+}
+
+// ── Auction copy ──
+function generateAuctionCopy(apiKey, allLots) {
+  var lotList = allLots.map(function(l, i) { return (i+1) + '. [Lot ' + l.lot + '] ' + l.name; }).join('\n');
+  var results = document.getElementById('results-area');
+  var rankCard = document.createElement('div');
+  rankCard.className = 'pending-card';
+  rankCard.innerHTML = '<div class="spinner"></div><span>Reviewing ' + allLots.length + ' lots and ranking by estimated value...</span>';
+  results.appendChild(rankCard);
+  updateProgress(0, allLots.length, 'Ranking lots by value...');
+
+  callClaude(apiKey, [{
+    role: 'user',
+    content: 'Here are the lots in an upcoming estate auction run by Bird\'s Nest Auctions:\n\n' + lotList + '\n\nRank ALL lots by estimated resale/auction value, highest first. Return ONLY a JSON array of lot numbers, like: ["87","256","4",...]. Include every lot. No other text.'
+  }], 2000).then(function(rankText) {
+    var ranked;
+    try { ranked = JSON.parse(rankText.replace(/```json|```/g,'').trim()); } catch(e) { ranked = allLots.map(function(l){ return l.lot; }); }
+    var lotMap = {};
+    allLots.forEach(function(l) { lotMap[l.lot] = l; });
+    var orderedLots = [];
+    ranked.forEach(function(n) { if (lotMap[String(n)]) orderedLots.push(lotMap[String(n)]); });
+    allLots.forEach(function(l) { if (orderedLots.indexOf(l) < 0) orderedLots.push(l); });
+    rankCard.remove();
+    generateBatch(apiKey, orderedLots, 0);
+  }).catch(function() {
+    rankCard.remove();
+    generateBatch(apiKey, allLots, 0);
+  });
+}
+
+function generateBatch(apiKey, orderedLots, startIdx) {
+  if (startIdx >= orderedLots.length) {
+    document.getElementById('gen-progress').style.display = 'none';
+    document.getElementById('progress-info').textContent = orderedLots.length + ' lots — done';
+    showToast('All copy generated!');
+    return;
+  }
+  var batch = orderedLots.slice(startIdx, startIdx + BATCH_SIZE);
+  var results = document.getElementById('results-area');
+  batch.forEach(function(lot) {
+    var c = document.createElement('div');
+    c.className = 'pending-card'; c.id = 'pending-' + lot.lot;
+    c.innerHTML = '<div class="spinner"></div><span>Writing copy for Lot ' + lot.lot + ': ' + esc(lot.name.substring(0,55)) + (lot.name.length > 55 ? '...' : '') + '</span>';
+    results.appendChild(c);
+  });
+
+  var pickupText = document.getElementById('pickup-input') ? document.getElementById('pickup-input').value.trim() : '';
+
+  Promise.all(batch.map(function(lot, bIdx) {
+    return generateLotCopy(apiKey, lot, pickupText).then(function(copy) {
+      var p = document.getElementById('pending-' + lot.lot);
+      if (p) p.remove();
+      results.appendChild(buildResultCard(lot, copy));
+      var done = startIdx + bIdx + 1;
+      updateProgress(done, orderedLots.length, 'Generated ' + done + ' of ' + orderedLots.length + ' lots...');
+      document.getElementById('progress-info').textContent = done + ' / ' + orderedLots.length;
+    }).catch(function(err) {
+      var p = document.getElementById('pending-' + lot.lot);
+      if (p) p.remove();
+      var e = document.createElement('div');
+      e.className = 'error-card';
+      e.textContent = 'Lot ' + lot.lot + ' (' + lot.name.substring(0,40) + '): ' + err.message;
+      results.appendChild(e);
+    });
+  })).then(function() { generateBatch(apiKey, orderedLots, startIdx + BATCH_SIZE); });
+}
+
+function generateLotCopy(apiKey, lot, pickupText) {
+  var pickupAppend = pickupText ? '\n\n' + pickupText : '';
+  var prompt = 'Write auction listing copy for Bird\'s Nest Auctions for the following lot:\n\nLot Name: ' + lot.name + '\n\nWrite:\n1. A compelling TITLE under 80 characters — specific, highlights the most valuable aspect\n2. A DESCRIPTION of 1-2 paragraphs — highlight brand, materials, age, condition signals, collectibility. Warm and knowledgeable voice, not salesy. Do not mention china cabinets or desks as highlights.\n\nIMPORTANT: At the very end of the description, append exactly this text (do not modify it):\n' + pickupAppend + '\n\nReturn ONLY a JSON object: {"title": "...", "description": "..."}. No other text.';
+  return callClaude(apiKey, [{ role: 'user', content: prompt }], 700).then(function(text) {
+    return JSON.parse(text.replace(/```json|```/g,'').trim());
+  });
+}
+
+function buildResultCard(lot, copy) {
+  var card = document.createElement('div');
+  card.className = 'lot-card';
+  card.innerHTML =
+    '<div class="lot-card-header"><div class="lot-card-meta">' +
+    '<div class="lot-badge">Lot ' + esc(lot.lot) + '</div>' +
+    '<div class="lot-original-name">Original: ' + esc(lot.name) + '</div>' +
+    '</div></div><div class="lot-card-body">' +
+    '<div class="copy-section"><div class="copy-label">Title <button class="btn btn-copy" onclick="copyText(this,\'t-' + lot.lot + '\')">Copy</button></div>' +
+    '<div class="copy-text" id="t-' + lot.lot + '">' + esc(copy.title || lot.name) + '</div></div>' +
+    '<div class="copy-section"><div class="copy-label">Description <button class="btn btn-copy" onclick="copyText(this,\'d-' + lot.lot + '\')">Copy</button></div>' +
+    '<div class="copy-text" id="d-' + lot.lot + '">' + esc(copy.description || '') + '</div></div>' +
+    '</div>';
+  return card;
+}
+
+function callClaude(apiKey, messages, maxTokens) {
+  return fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-client-side-api-key-flag': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens || 1000, messages: messages })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) throw new Error(data.error.message || 'API error');
+    var text = data.content && data.content[0] && data.content[0].text;
+    if (!text) throw new Error('Empty response');
+    return text;
+  });
+}
+
+function copyText(btn, id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText || el.textContent).then(function() {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+function updateProgress(done, total, label) {
+  document.getElementById('prog-fill').style.width = (total > 0 ? Math.round(done/total*100) : 0) + '%';
+  document.getElementById('prog-label').textContent = label || (done + ' of ' + total);
+}
+function goBack() {
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('results-area').innerHTML = '';
+  lots = []; document.getElementById('file-chosen').style.display = 'none';
+  checkReady();
+}
+function showSetupError(msg) { var el=document.getElementById('setup-error'); el.textContent=msg; el.style.display='block'; }
+function hideSetupError() { document.getElementById('setup-error').style.display='none'; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg) { var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); setTimeout(function(){ el.classList.remove('show'); },2400); }
+</script>
+</body>
+</html>
