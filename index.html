@@ -249,6 +249,24 @@ window.addEventListener('load', function() {
 });
 
 // ── CSV parser ──
+// ── Generic CSV splitter ──
+function splitCSVLine(line) {
+  var cols = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') {
+      if (!inQ && cur === '') { inQ = true; }
+      else if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else if (inQ) { var nx=line[i+1]; if(nx===','||nx===undefined||i===line.length-1) inQ=false; else cur+=c; }
+      else cur += c;
+    } else if (c === ',' && !inQ) { cols.push(cur); cur = ''; }
+    else cur += c;
+  }
+  cols.push(cur);
+  return cols;
+}
+
+// ── BidPath format parser ──
 function parseBidPathLine(line) {
   var p1 = line.indexOf('","');
   if (p1 < 0) return null;
@@ -268,14 +286,45 @@ function parseBidPathLine(line) {
   if (name.charAt(name.length - 1) === '"') name = name.substring(0, name.length - 1);
   return { item: item, lot: lot, name: name, image: image, sort: sortOrder };
 }
+
+function stripHtml(str) {
+  return (str || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function parseCSV(text) {
-  var lines = text.split(/\r?\n/), results = [], done = false;
+  if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+  var lines = text.split(/\r?\n/);
+  var results = [], headerDone = false, header = null;
+  var firstLine = lines[0].replace(/^\uFEFF/, '').trim().toLowerCase();
+  var isAssetTrax = firstLine.indexOf('lot#') >= 0 || firstLine.indexOf('lot #') >= 0;
+
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
     if (!line) continue;
-    if (!done) { done = true; continue; }
-    var row = parseBidPathLine(line);
-    if (row && row.name) results.push(row);
+    if (!headerDone) {
+      headerDone = true;
+      if (isAssetTrax) header = splitCSVLine(line).map(function(c){ return c.trim().toLowerCase(); });
+      continue;
+    }
+    if (isAssetTrax) {
+      var cols = splitCSVLine(line);
+      var nameIdx = header.indexOf('name');
+      var lotIdx = header.indexOf('lot#'); if (lotIdx < 0) lotIdx = header.indexOf('lot #');
+      var descIdx = header.indexOf('description');
+      var catIdx = header.indexOf('category');
+      var sortIdx = header.indexOf('sort order');
+      if (nameIdx < 0 || lotIdx < 0 || !cols[nameIdx]) continue;
+      results.push({
+        item: cols[lotIdx]||'', lot: cols[lotIdx]||'',
+        name: cols[nameIdx]||'',
+        description: descIdx >= 0 ? stripHtml(cols[descIdx]) : '',
+        category: catIdx >= 0 ? (cols[catIdx]||'') : '',
+        image: '', sort: parseInt(sortIdx >= 0 ? cols[sortIdx] : '9999', 10) || 9999
+      });
+    } else {
+      var row = parseBidPathLine(line);
+      if (row && row.name) results.push(row);
+    }
   }
   return results;
 }
@@ -294,7 +343,7 @@ function readCSV(file) {
   var r = new FileReader();
   r.onload = function(e) {
     lots = parseCSV(e.target.result);
-    if (!lots.length) { showSetupError('No lots found. Check this is the correct BidPath export.'); return; }
+    if (!lots.length) { showSetupError('No lots found. This tool accepts both BidPath custom exports and AssetTrax CSV exports.'); return; }
     hideSetupError();
     var fc = document.getElementById('file-chosen');
     fc.textContent = '✓ ' + file.name + ' — ' + lots.length + ' lots loaded';
@@ -432,7 +481,10 @@ function generateBatch(apiKey, orderedLots, startIdx) {
 
 function generateLotCopy(apiKey, lot, pickupText) {
   var pickupAppend = pickupText ? '\n\n' + pickupText : '';
-  var prompt = 'Write auction listing copy for Bird\'s Nest Auctions for the following lot:\n\nLot Name: ' + lot.name + '\n\nWrite:\n1. A compelling TITLE under 80 characters — specific, highlights the most valuable aspect\n2. A DESCRIPTION of 1-2 paragraphs — highlight brand, materials, age, condition signals, collectibility. Warm and knowledgeable voice, not salesy. Do not mention china cabinets or desks as highlights.\n\nIMPORTANT: At the very end of the description, append exactly this text (do not modify it):\n' + pickupAppend + '\n\nReturn ONLY a JSON object: {"title": "...", "description": "..."}. No other text.';
+  var context = 'Lot Name: ' + lot.name;
+  if (lot.category) context += '\nCategory: ' + lot.category;
+  if (lot.description) context += '\nExisting notes: ' + lot.description.substring(0, 300);
+  var prompt = 'Write auction listing copy for Bird\'s Nest Auctions for the following lot:\n\n' + context + '\n\nWrite:\n1. A compelling TITLE under 80 characters — specific, highlights the most valuable aspect\n2. A DESCRIPTION of 1-2 paragraphs — highlight brand, materials, age, condition signals, collectibility. Warm and knowledgeable voice, not salesy. Do not mention china cabinets or desks as highlights. Use the existing notes for context but write fresh copy.\n\nIMPORTANT: At the very end of the description, append exactly this text (do not modify it):\n' + pickupAppend + '\n\nReturn ONLY a JSON object: {"title": "...", "description": "..."}. No other text.';
   return callClaude(apiKey, [{ role: 'user', content: prompt }], 700).then(function(text) {
     return JSON.parse(text.replace(/```json|```/g,'').trim());
   });
