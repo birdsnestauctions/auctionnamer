@@ -108,29 +108,8 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 <header>
   <h1>BNA Auction Copy Generator</h1>
   <span>Bird's Nest Auctions</span>
-  <button class="header-gear" onclick="showSettings()" title="API Key Settings">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-  </button>
-</header>
 
-<!-- Settings -->
-<div id="settings-screen">
-  <div class="settings-card">
-    <h2>API Key Settings</h2>
-    <p>Enter your Anthropic API key below. It will be saved to this browser so you only need to do this once per device.</p>
-    <div class="key-saved-msg" id="key-saved-msg">✓ A key is currently saved on this device.</div>
-    <label class="field-label">Anthropic API key</label>
-    <input type="password" id="settings-key-input" class="field-input" placeholder="sk-ant-..." autocomplete="off">
-    <div class="settings-actions">
-      <button class="btn btn-teal" style="width:auto;padding:9px 20px;" onclick="saveKey()">Save key</button>
-      <button class="btn btn-ghost" onclick="cancelSettings()">Cancel</button>
-      <button class="btn btn-danger" onclick="clearKey()" id="clear-key-btn" style="display:none;margin-left:auto;">Remove saved key</button>
-    </div>
-  </div>
-</div>
+</header>
 
 <!-- Setup -->
 <div id="setup-screen">
@@ -138,7 +117,6 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
     <h2>Generate auction copy</h2>
     <p>Upload your BidPath CSV export, choose what to generate, and the tool will write copy prioritized by estimated lot value.</p>
     <div id="setup-error"></div>
-    <div class="no-key-notice" id="no-key-notice">No API key saved yet. <a onclick="showSettings()">Add your key in Settings</a> to get started.</div>
 
     <label class="field-label">What would you like to generate?</label>
     <div class="mode-toggle">
@@ -185,34 +163,6 @@ var STORAGE_KEY = 'bna_anthropic_key';
 var PICKUP_KEY = 'bna_pickup_text';
 var DEFAULT_PICKUP = 'Yes, we ship! Transfers to our Derry HQ also available (fees apply).';
 var BATCH_SIZE = 5;
-
-// ── Key management ──
-function getSavedKey() { try { return localStorage.getItem(STORAGE_KEY) || ''; } catch(e) { return ''; } }
-function saveKey() {
-  var val = document.getElementById('settings-key-input').value.trim();
-  if (!val || val.startsWith('•')) { showToast('Please enter a valid key'); return; }
-  try { localStorage.setItem(STORAGE_KEY, val); showToast('Key saved to this device'); cancelSettings(); checkReady(); } catch(e) { showToast('Could not save — browser storage may be blocked'); }
-}
-function clearKey() {
-  if (!confirm('Remove the saved API key from this device?')) return;
-  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
-  showToast('Key removed'); cancelSettings(); checkReady();
-}
-function showSettings() {
-  var saved = getSavedKey();
-  document.getElementById('key-saved-msg').style.display = saved ? 'block' : 'none';
-  document.getElementById('clear-key-btn').style.display = saved ? 'inline-block' : 'none';
-  var inp = document.getElementById('settings-key-input');
-  inp.value = saved ? '••••••••••••••••' : '';
-  inp.onfocus = function() { if (inp.value.startsWith('•')) inp.value = ''; };
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('app-screen').style.display = 'none';
-  document.getElementById('settings-screen').style.display = 'flex';
-}
-function cancelSettings() {
-  document.getElementById('settings-screen').style.display = 'none';
-  document.getElementById('setup-screen').style.display = 'flex';
-}
 
 // ── Mode ──
 function setMode(mode) {
@@ -354,15 +304,12 @@ function readCSV(file) {
 }
 
 function checkReady() {
-  var key = getSavedKey();
-  document.getElementById('no-key-notice').style.display = key ? 'none' : 'block';
-  document.getElementById('generate-btn').disabled = !(key && lots.length > 0);
+  document.getElementById('generate-btn').disabled = !(lots.length > 0);
 }
 
 // ── Generation ──
 function startGeneration() {
-  var key = getSavedKey();
-  if (!key || !lots.length) return;
+  if (!lots.length) return;
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   var auctionName = currentFilename.replace(/\.csv$/i, '');
@@ -372,9 +319,9 @@ function startGeneration() {
   document.getElementById('results-area').innerHTML = '';
 
   if (currentMode === 'newsletter') {
-    generateNewsletter(key, lots);
+    generateNewsletter('', lots);
   } else {
-    generateAuctionCopy(key, lots);
+    generateAuctionCopy('', lots);
   }
 }
 
@@ -507,9 +454,9 @@ function buildResultCard(lot, copy) {
 }
 
 function callClaude(apiKey, messages, maxTokens) {
-  return fetch('https://api.anthropic.com/v1/messages', {
+  return fetch('https://bna-claude-proxy.onrender.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-client-side-api-key-flag': 'true' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens || 1000, messages: messages })
   }).then(function(r) { return r.json(); }).then(function(data) {
     if (data.error) throw new Error(data.error.message || 'API error');
