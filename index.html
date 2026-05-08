@@ -120,7 +120,7 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
 
     <label class="field-label">What would you like to generate?</label>
     <div class="mode-toggle">
-      <button class="mode-btn active" id="mode-auction" onclick="setMode('auction')">Auction titles &amp; descriptions</button>
+      <button class="mode-btn active" id="mode-auction" onclick="setMode('auction')">Auction description</button>
       <button class="mode-btn" id="mode-newsletter" onclick="setMode('newsletter')">Newsletter blurb</button>
     </div>
 
@@ -313,7 +313,7 @@ function startGeneration() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   var auctionName = currentFilename.replace(/\.csv$/i, '');
-  var modeLabel = currentMode === 'newsletter' ? 'Newsletter blurb' : 'Auction copy';
+  var modeLabel = currentMode === 'newsletter' ? 'Newsletter blurb' : 'Auction description';
   document.getElementById('app-label').textContent = auctionName + ' — ' + modeLabel;
   document.getElementById('gen-progress').style.display = 'block';
   document.getElementById('results-area').innerHTML = '';
@@ -338,8 +338,8 @@ function generateNewsletter(apiKey, allLots) {
 
   callClaude(apiKey, [{
     role: 'user',
-    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire:\n\n' + lotList + '\n\nWrite a short newsletter blurb (2-3 paragraphs) for this auction. It should:\n- Give a general sense of what\'s in the auction (themes, categories, overall feel)\n- Call out 3-5 of the most exciting or valuable standout lots by name\n- Sound warm, enthusiastic, and inviting — like it\'s written by someone who knows their antiques and collectibles\n- Not mention china cabinets or desks as standout items\n- End with a gentle call to action to browse and bid\n\nReturn only the blurb text, no JSON, no headers.'
-  }], 800).then(function(text) {
+    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire:\n\n' + lotList + '\n\nWrite a newsletter blurb of exactly 3-4 sentences for this auction. It should give a general sense of what is included, call out 2-3 standout pieces by name, and end with a brief invitation to browse and bid. Warm and knowledgeable voice. Do not mention china cabinets or desks as standout items. Return only the blurb text, no headers, no extra formatting.'
+  }], 400).then(function(text) {
     card.remove();
     var resultCard = document.createElement('div');
     resultCard.className = 'newsletter-card';
@@ -360,104 +360,55 @@ function generateNewsletter(apiKey, allLots) {
   });
 }
 
-// ── Auction copy ──
+// ── Auction description ──
 function generateAuctionCopy(apiKey, allLots) {
-  var lotList = allLots.map(function(l, i) { return (i+1) + '. [Lot ' + l.lot + '] ' + l.name; }).join('\n');
+  var lotList = allLots.map(function(l) { return '[Lot ' + l.lot + '] ' + l.name; }).join('\n');
+  var pickupText = document.getElementById('pickup-input') ? document.getElementById('pickup-input').value.trim() : '';
   var results = document.getElementById('results-area');
-  var rankCard = document.createElement('div');
-  rankCard.className = 'pending-card';
-  rankCard.innerHTML = '<div class="spinner"></div><span>Reviewing ' + allLots.length + ' lots and ranking by estimated value...</span>';
-  results.appendChild(rankCard);
-  updateProgress(0, allLots.length, 'Ranking lots by value...');
+  var card = document.createElement('div');
+  card.className = 'pending-card';
+  card.innerHTML = '<div class="spinner"></div><span>Reviewing ' + allLots.length + ' lots and writing auction description...</span>';
+  results.appendChild(card);
+  updateProgress(0, 1, 'Writing auction description...');
 
   callClaude(apiKey, [{
     role: 'user',
-    content: 'Here are the lots in an upcoming estate auction run by Bird\'s Nest Auctions:\n\n' + lotList + '\n\nRank ALL lots by estimated resale/auction value, highest first. Return ONLY a JSON array of lot numbers, like: ["87","256","4",...]. Include every lot. No other text.'
-  }], 2000).then(function(rankText) {
-    var ranked;
-    try { ranked = JSON.parse(rankText.replace(/```json|```/g,'').trim()); } catch(e) { ranked = allLots.map(function(l){ return l.lot; }); }
-    var lotMap = {};
-    allLots.forEach(function(l) { lotMap[l.lot] = l; });
-    var orderedLots = [];
-    ranked.forEach(function(n) { if (lotMap[String(n)]) orderedLots.push(lotMap[String(n)]); });
-    allLots.forEach(function(l) { if (orderedLots.indexOf(l) < 0) orderedLots.push(l); });
-    rankCard.remove();
-    generateBatch(apiKey, orderedLots, 0);
-  }).catch(function() {
-    rankCard.remove();
-    generateBatch(apiKey, allLots, 0);
-  });
-}
-
-function generateBatch(apiKey, orderedLots, startIdx) {
-  if (startIdx >= orderedLots.length) {
+    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire:\n\n' + lotList + '\n\nWrite two things for the BidPath auction listing:\n\n1. HEADLINE: A short, punchy headline (under 10 words) that drives interest and gives a sense of what makes this sale exciting. Think of it like an email subject line — specific enough to intrigue, not generic.\n\n2. DESCRIPTION: 3-5 sentences that open with a brief characterization of the estate, identify the major categories represented, and call out 4-6 specific standout pieces by name. Knowledgeable and warm. Do not mention china cabinets or desks as standout items.\n\nReturn ONLY a JSON object: {"headline": "...", "description": "..."}. No other text.'
+  }], 700).then(function(text) {
+    card.remove();
+    var parsed;
+    try { parsed = JSON.parse(text.replace(/```json|```/g,'').trim()); } catch(e) { parsed = { headline: '', description: text.trim() }; }
+    var desc = parsed.description || text.trim();
+    var full = pickupText ? desc + '\n\n' + pickupText : desc;
+    var resultCard = document.createElement('div');
+    resultCard.className = 'newsletter-card';
+    resultCard.innerHTML =
+      '<div class="newsletter-card-header"><h3>Auction description</h3></div>' +
+      '<div class="newsletter-card-body">' +
+      '<div class="copy-label" style="margin-bottom:6px;">Headline <button class="btn btn-copy" onclick="copyText(this,\'auction-headline-text\')">Copy</button></div>' +
+      '<div class="newsletter-text" id="auction-headline-text" style="margin-bottom:14px;font-weight:500;">' + esc(parsed.headline || '') + '</div>' +
+      '<div class="copy-label" style="margin-bottom:6px;">Description <button class="btn btn-copy" onclick="copyText(this,\'auction-desc-text\')">Copy</button></div>' +
+      '<div class="newsletter-text" id="auction-desc-text">' + esc(full) + '</div>' +
+      '</div>';
+    results.appendChild(resultCard);
     document.getElementById('gen-progress').style.display = 'none';
-    document.getElementById('progress-info').textContent = orderedLots.length + ' lots — done';
-    showToast('All copy generated!');
-    return;
-  }
-  var batch = orderedLots.slice(startIdx, startIdx + BATCH_SIZE);
-  var results = document.getElementById('results-area');
-  batch.forEach(function(lot) {
-    var c = document.createElement('div');
-    c.className = 'pending-card'; c.id = 'pending-' + lot.lot;
-    c.innerHTML = '<div class="spinner"></div><span>Writing copy for Lot ' + lot.lot + ': ' + esc(lot.name.substring(0,55)) + (lot.name.length > 55 ? '...' : '') + '</span>';
-    results.appendChild(c);
+    document.getElementById('progress-info').textContent = 'Done';
+    showToast('Auction description ready!');
+  }).catch(function(err) {
+    card.remove();
+    var errCard = document.createElement('div');
+    errCard.className = 'error-card';
+    errCard.textContent = 'Error: ' + err.message;
+    results.appendChild(errCard);
+    document.getElementById('gen-progress').style.display = 'none';
   });
-
-  var pickupText = document.getElementById('pickup-input') ? document.getElementById('pickup-input').value.trim() : '';
-
-  Promise.all(batch.map(function(lot, bIdx) {
-    return generateLotCopy(apiKey, lot, pickupText).then(function(copy) {
-      var p = document.getElementById('pending-' + lot.lot);
-      if (p) p.remove();
-      results.appendChild(buildResultCard(lot, copy));
-      var done = startIdx + bIdx + 1;
-      updateProgress(done, orderedLots.length, 'Generated ' + done + ' of ' + orderedLots.length + ' lots...');
-      document.getElementById('progress-info').textContent = done + ' / ' + orderedLots.length;
-    }).catch(function(err) {
-      var p = document.getElementById('pending-' + lot.lot);
-      if (p) p.remove();
-      var e = document.createElement('div');
-      e.className = 'error-card';
-      e.textContent = 'Lot ' + lot.lot + ' (' + lot.name.substring(0,40) + '): ' + err.message;
-      results.appendChild(e);
-    });
-  })).then(function() { generateBatch(apiKey, orderedLots, startIdx + BATCH_SIZE); });
-}
-
-function generateLotCopy(apiKey, lot, pickupText) {
-  var pickupAppend = pickupText ? '\n\n' + pickupText : '';
-  var context = 'Lot Name: ' + lot.name;
-  if (lot.category) context += '\nCategory: ' + lot.category;
-  if (lot.description) context += '\nExisting notes: ' + lot.description.substring(0, 300);
-  var prompt = 'Write auction listing copy for Bird\'s Nest Auctions for the following lot:\n\n' + context + '\n\nWrite:\n1. A compelling TITLE under 80 characters — specific, highlights the most valuable aspect\n2. A DESCRIPTION of 1-2 paragraphs — highlight brand, materials, age, condition signals, collectibility. Warm and knowledgeable voice, not salesy. Do not mention china cabinets or desks as highlights. Use the existing notes for context but write fresh copy.\n\nIMPORTANT: At the very end of the description, append exactly this text (do not modify it):\n' + pickupAppend + '\n\nReturn ONLY a JSON object: {"title": "...", "description": "..."}. No other text.';
-  return callClaude(apiKey, [{ role: 'user', content: prompt }], 700).then(function(text) {
-    return JSON.parse(text.replace(/```json|```/g,'').trim());
-  });
-}
-
-function buildResultCard(lot, copy) {
-  var card = document.createElement('div');
-  card.className = 'lot-card';
-  card.innerHTML =
-    '<div class="lot-card-header"><div class="lot-card-meta">' +
-    '<div class="lot-badge">Lot ' + esc(lot.lot) + '</div>' +
-    '<div class="lot-original-name">Original: ' + esc(lot.name) + '</div>' +
-    '</div></div><div class="lot-card-body">' +
-    '<div class="copy-section"><div class="copy-label">Title <button class="btn btn-copy" onclick="copyText(this,\'t-' + lot.lot + '\')">Copy</button></div>' +
-    '<div class="copy-text" id="t-' + lot.lot + '">' + esc(copy.title || lot.name) + '</div></div>' +
-    '<div class="copy-section"><div class="copy-label">Description <button class="btn btn-copy" onclick="copyText(this,\'d-' + lot.lot + '\')">Copy</button></div>' +
-    '<div class="copy-text" id="d-' + lot.lot + '">' + esc(copy.description || '') + '</div></div>' +
-    '</div>';
-  return card;
 }
 
 function callClaude(apiKey, messages, maxTokens) {
   return fetch('https://bna-claude-proxy.onrender.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens || 1000, messages: messages })
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens || 1000, messages: messages })
   }).then(function(r) { return r.json(); }).then(function(data) {
     if (data.error) throw new Error(data.error.message || 'API error');
     var text = data.content && data.content[0] && data.content[0].text;
