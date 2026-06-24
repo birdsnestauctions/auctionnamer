@@ -216,64 +216,75 @@ function splitCSVLine(line) {
   return cols;
 }
 
-// ── BidPath format parser ──
-function parseBidPathLine(line) {
-  var p1 = line.indexOf('","');
-  if (p1 < 0) return null;
-  var p2 = line.indexOf('","', p1 + 3);
-  if (p2 < 0) return null;
-  var item = line[0] === '"' ? line.substring(1, p1) : line.substring(0, p1);
-  var lot = line.substring(p1 + 3, p2);
-  var lastQ = line.lastIndexOf('"');
-  var prevSep = line.lastIndexOf('","', lastQ - 1);
-  var sortOrder = prevSep >= 0 ? line.substring(prevSep + 3, lastQ) : '';
-  var imgMarker = line.indexOf('","https://');
-  if (imgMarker < 0) imgMarker = line.indexOf('","http://');
-  var name, image;
-  if (imgMarker > p2) { name = line.substring(p2 + 3, imgMarker); image = line.substring(imgMarker + 3, prevSep); }
-  else { name = line.substring(p2 + 3, prevSep); image = ''; }
-  if (name.charAt(0) === '"') name = name.substring(1);
-  if (name.charAt(name.length - 1) === '"') name = name.substring(0, name.length - 1);
-  return { item: item, lot: lot, name: name, image: image, sort: sortOrder };
+// ── Generic CSV tokenizer (RFC4180-aware: handles embedded newlines, commas, and "" escaped quotes inside quoted fields) ──
+function tokenizeCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+  var rows = [], row = [], field = '', inQuotes = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else {
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* skip — handled by following \n */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else { field += c; }
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.filter(function(r) { return !(r.length === 1 && r[0].trim() === ''); });
 }
 
 function stripHtml(str) {
-  return (str || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return (str || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+}
+
+function findCol(header, names) {
+  for (var i = 0; i < names.length; i++) {
+    var idx = header.indexOf(names[i]);
+    if (idx >= 0) return idx;
+  }
+  return -1;
 }
 
 function parseCSV(text) {
-  if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
-  var lines = text.split(/\r?\n/);
-  var results = [], headerDone = false, header = null;
-  var firstLine = lines[0].replace(/^\uFEFF/, '').trim().toLowerCase();
-  var isAssetTrax = firstLine.indexOf('lot#') >= 0 || firstLine.indexOf('lot #') >= 0;
+  var rows = tokenizeCSV(text);
+  if (!rows.length) return [];
+  var header = rows[0].map(function(c) { return c.trim().toLowerCase(); });
+  var nameIdx = findCol(header, ['name']);
+  var lotIdx = findCol(header, ['lot#', 'lot #', 'lot', 'lot number', 'item #']);
+  var descIdx = findCol(header, ['description']);
+  var catIdx = findCol(header, ['category']);
+  var sortIdx = findCol(header, ['sort order', 'sortorder']);
 
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    if (!line) continue;
-    if (!headerDone) {
-      headerDone = true;
-      if (isAssetTrax) header = splitCSVLine(line).map(function(c){ return c.trim().toLowerCase(); });
-      continue;
-    }
-    if (isAssetTrax) {
-      var cols = splitCSVLine(line);
-      var nameIdx = header.indexOf('name');
-      var lotIdx = header.indexOf('lot#'); if (lotIdx < 0) lotIdx = header.indexOf('lot #');
-      var descIdx = header.indexOf('description');
-      var catIdx = header.indexOf('category');
-      var sortIdx = header.indexOf('sort order');
-      if (nameIdx < 0 || lotIdx < 0 || !cols[nameIdx]) continue;
+  var results = [];
+
+  if (nameIdx >= 0 && lotIdx >= 0) {
+    // Header-based parsing — covers AssetTrax exports and BidPath exports that include a header row
+    for (var i = 1; i < rows.length; i++) {
+      var cols = rows[i];
+      if (!cols[nameIdx]) continue;
       results.push({
-        item: cols[lotIdx]||'', lot: cols[lotIdx]||'',
-        name: cols[nameIdx]||'',
+        item: cols[lotIdx] || '',
+        lot: cols[lotIdx] || '',
+        name: cols[nameIdx] || '',
         description: descIdx >= 0 ? stripHtml(cols[descIdx]) : '',
-        category: catIdx >= 0 ? (cols[catIdx]||'') : '',
-        image: '', sort: parseInt(sortIdx >= 0 ? cols[sortIdx] : '9999', 10) || 9999
+        category: catIdx >= 0 ? (cols[catIdx] || '') : '',
+        sort: parseInt(sortIdx >= 0 ? cols[sortIdx] : '9999', 10) || 9999
       });
-    } else {
-      var row = parseBidPathLine(line);
-      if (row && row.name) results.push(row);
+    }
+  } else {
+    // Fallback — legacy headerless BidPath export: item, lot, name, image, sortOrder columns positionally
+    for (var j = 1; j < rows.length; j++) {
+      var c = rows[j];
+      if (c.length < 3 || !c[2]) continue;
+      results.push({ item: c[0] || '', lot: c[1] || '', name: c[2] || '', description: '', category: '', sort: parseInt(c[4], 10) || 9999 });
     }
   }
   return results;
@@ -334,11 +345,16 @@ function generateNewsletter(apiKey, allLots) {
   results.appendChild(card);
   updateProgress(0, 1, 'Writing newsletter blurb...');
 
-  var lotList = allLots.map(function(l) { return '[Lot ' + l.lot + '] ' + l.name; }).join('\n');
+  var lotList = allLots.map(function(l) {
+    var line = '[Lot ' + l.lot + '] ' + l.name;
+    if (l.category) line += ' (' + l.category + ')';
+    if (l.description) line += ' — ' + l.description.substring(0, 200);
+    return line;
+  }).join('\n');
 
   callClaude(apiKey, [{
     role: 'user',
-    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire or northeastern Massachusetts:\n\n' + lotList + '\n\nWrite a newsletter blurb of 3-4 sentences. It should give a sense of what\'s in the auction, call out 2-3 standout pieces or categories by name, and end with a brief invitation to browse and bid. Warm and direct — written by someone who knows antiques and estate sales, not a generic copywriter. No filler phrases. Do not mention china cabinets or desks as standout items. Return only the blurb text, no headers, no formatting.'
+    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire or northeastern Massachusetts:\n\n' + lotList + '\n\nScan every lot for genuine signals of value or interest: named makers/brands, signed pieces, precious metals (gold, sterling, silver), fine materials (mahogany, hand-knotted wool, crystal), age and rarity (antique, vintage, limited edition), and notable sets or collections. Don\'t default to generic categories if specific standout items exist.\n\nWrite a newsletter blurb of 3-4 sentences. It should give a sense of what\'s in the auction, call out 2-3 of the most genuinely notable pieces or categories by name, and end with a brief invitation to browse and bid. Warm and direct — written by someone who knows antiques and estate sales, not a generic copywriter. No filler phrases. Do not mention china cabinets or desks as standout items. Return only the blurb text, no headers, no formatting.'
   }], 400).then(function(text) {
     card.remove();
     var resultCard = document.createElement('div');
@@ -362,7 +378,12 @@ function generateNewsletter(apiKey, allLots) {
 
 // ── Auction description ──
 function generateAuctionCopy(apiKey, allLots) {
-  var lotList = allLots.map(function(l) { return '[Lot ' + l.lot + '] ' + l.name; }).join('\n');
+  var lotList = allLots.map(function(l) {
+    var line = '[Lot ' + l.lot + '] ' + l.name;
+    if (l.category) line += ' (' + l.category + ')';
+    if (l.description) line += ' — ' + l.description.substring(0, 200);
+    return line;
+  }).join('\n');
   var pickupText = document.getElementById('pickup-input') ? document.getElementById('pickup-input').value.trim() : '';
   var results = document.getElementById('results-area');
   var card = document.createElement('div');
@@ -373,7 +394,7 @@ function generateAuctionCopy(apiKey, allLots) {
 
   callClaude(apiKey, [{
     role: 'user',
-    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire or northeastern Massachusetts:\n\n' + lotList + '\n\nWrite two things for the BidPath auction listing page.\n\n---\n\n1. HEADLINE: A descriptive auction title that lists the key categories and standout types of items in this sale — written to make someone want to click through. Style: specific, varied, reads like a curated list of what\'s here. No generic phrases like "Don\'t miss this" or "Amazing finds." Location is optional but can be included.\n\nExamples of the right style:\n- "Watches, Rugs, Antiques, Camping Gear and More in Londonderry, NH"\n- "Estate Auction in Manchester, NH: Peloton, Lionel, Signed Art, Gold, Patio Furniture, Collectibles and More!"\n- "Interior Designer and Artist Home in Londonderry, NH: Pottery, Majolica, Rustic Country, Antiques and More"\n- "Vintage Treasure Trove in Raymond, NH: Furniture, Décor, Kitchen, Tools, Collectibles & More"\n- "Hollis Estate Auction: Antiques, Rugs, Miniatures, Garden Statuary & More"\n\n---\n\n2. DESCRIPTION: 2-4 paragraphs of auction description copy in the voice of someone who knows antiques and estate sales — warm, direct, and specific. Rules:\n- Vary the opening (do NOT always start with "This auction features" — mix it up)\n- Name specific makers, brands, materials, or dimensions where they add interest\n- Organize around the strongest categories or standout pieces\n- End with something light and inviting — "Don\'t miss this one!" or "Something for everyone — happy bidding!" or similar\n- Do NOT mention china cabinets or desks as standout items\n- Do NOT use filler phrases like "We\'re excited to bring you" or "a treasure trove of possibilities"\n- Scale length to auction size: small auctions (under 100 lots) = 2-3 sentences; medium (100-300 lots) = 1 paragraph; large (300+ lots) = 2 paragraphs\n\nExamples of the right voice:\n- "This Manchester estate is loaded with standout finds. Leading the sale is a rare Jerry Garcia signed lithograph (499/500), an extensive Lionel O-gauge train collection, and a trio of 1971-72 O-Pee-Chee hockey cards featuring Orr, Esposito, and Cheevers."\n- "Join us for a fantastic estate auction out of a well-appointed Reading, MA home! This sale is packed with quality furniture from sought-after makers including Drexel Heritage, Bradington-Young, Hickory House, Thomasville, and Butler Specialty."\n- "Find over 400 lots from a beautifully appointed home. The collection is particularly strong in pottery & ceramics including majolica, original artwork, and collection of hens on nests, with a notable assortment of glassware, vintage & retro finds, art, antiques, collectibles, and gold & silver."\n- "Over 470 lots from a well-stocked Windham, NH estate! Highlights include Bauhaus purple sofa and armchair, MCM hand-carved wood tables, Muskoka electric fireplace console... Something for everyone – happy bidding!"\n\n---\n\nReturn ONLY a JSON object: {"headline": "...", "description": "..."}. No other text.'
+    content: 'Here are the lots in an upcoming Bird\'s Nest Auctions estate auction in Southern New Hampshire or northeastern Massachusetts:\n\n' + lotList + '\n\nFirst, scan every lot for genuine signals of value or interest: named makers/brands, signed pieces, precious metals (gold, sterling, silver), fine materials (mahogany, hand-knotted wool, crystal), age and rarity (antique, vintage, limited edition), and notable sets or collections. Use these — not generic guesses — to decide what counts as a standout. If the lot data doesn\'t support a specific standout claim, don\'t invent one.\n\nThen write two things for the BidPath auction listing page.\n\n---\n\n1. HEADLINE: A descriptive auction title that lists the key categories and standout types of items in this sale — written to make someone want to click through. Style: specific, varied, reads like a curated list of what\'s here. No generic phrases like "Don\'t miss this" or "Amazing finds." Location is optional but can be included.\n\nExamples of the right style:\n- "Watches, Rugs, Antiques, Camping Gear and More in Londonderry, NH"\n- "Estate Auction in Manchester, NH: Peloton, Lionel, Signed Art, Gold, Patio Furniture, Collectibles and More!"\n- "Interior Designer and Artist Home in Londonderry, NH: Pottery, Majolica, Rustic Country, Antiques and More"\n- "Vintage Treasure Trove in Raymond, NH: Furniture, Décor, Kitchen, Tools, Collectibles & More"\n- "Hollis Estate Auction: Antiques, Rugs, Miniatures, Garden Statuary & More"\n\n---\n\n2. DESCRIPTION: 2-4 paragraphs of auction description copy in the voice of someone who knows antiques and estate sales — warm, direct, and specific. Rules:\n- Vary the opening (do NOT always start with "This auction features" — mix it up)\n- Name specific makers, brands, materials, or dimensions where they add interest\n- Organize around the strongest categories or standout pieces\n- End with something light and inviting — "Don\'t miss this one!" or "Something for everyone — happy bidding!" or similar\n- Do NOT mention china cabinets or desks as standout items\n- Do NOT use filler phrases like "We\'re excited to bring you" or "a treasure trove of possibilities"\n- Scale length to auction size: small auctions (under 100 lots) = 2-3 sentences; medium (100-300 lots) = 1 paragraph; large (300+ lots) = 2 paragraphs\n\nExamples of the right voice:\n- "This Manchester estate is loaded with standout finds. Leading the sale is a rare Jerry Garcia signed lithograph (499/500), an extensive Lionel O-gauge train collection, and a trio of 1971-72 O-Pee-Chee hockey cards featuring Orr, Esposito, and Cheevers."\n- "Join us for a fantastic estate auction out of a well-appointed Reading, MA home! This sale is packed with quality furniture from sought-after makers including Drexel Heritage, Bradington-Young, Hickory House, Thomasville, and Butler Specialty."\n- "Find over 400 lots from a beautifully appointed home. The collection is particularly strong in pottery & ceramics including majolica, original artwork, and collection of hens on nests, with a notable assortment of glassware, vintage & retro finds, art, antiques, collectibles, and gold & silver."\n- "Over 470 lots from a well-stocked Windham, NH estate! Highlights include Bauhaus purple sofa and armchair, MCM hand-carved wood tables, Muskoka electric fireplace console... Something for everyone – happy bidding!"\n\n---\n\nReturn ONLY a JSON object: {"headline": "...", "description": "..."}. No other text.'
   }], 700).then(function(text) {
     card.remove();
     var parsed;
